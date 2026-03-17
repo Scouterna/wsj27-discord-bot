@@ -1,21 +1,14 @@
-# Use the official Node.js runtime as the base image
-FROM node:18-alpine
+FROM node:20-alpine
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json (if available)
+# Use Sectra npm registry
+RUN npm config set registry https://feeds.sectra.net/npm/
+
 COPY package*.json ./
+RUN npm install --omit=dev
 
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application code
 COPY src ./src
 COPY data ./data
 
-# Expose the port the app runs on (adjust if your app uses a different port)
-EXPOSE 3000
-
-# Define the command to run the application
 CMD ["npm", "start"]

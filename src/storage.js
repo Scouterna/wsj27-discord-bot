@@ -7,16 +7,17 @@ const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const NAMES_FILE = path.join(DATA_DIR, "names.json");
-const CLAIMS_FILE = path.join(DATA_DIR, "claims.json");
+const CLAIMS_FILE = process.env.CLAIMS_PATH || path.join(DATA_DIR, "claims.json");
 
 /**
  * Ensure data directory exists
  */
 async function ensureDataDirectory() {
+  const claimsDir = path.dirname(CLAIMS_FILE);
   try {
-    await fs.access(DATA_DIR);
+    await fs.access(claimsDir);
   } catch {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(claimsDir, { recursive: true });
   }
 }
 

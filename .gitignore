@@ -3,3 +3,9 @@ node_modules/
 .DS_Store
 *.log
 data/claims.json
+
+# Terraform
+terraform/secrets.tfvars
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/.terraform.lock.hcl
