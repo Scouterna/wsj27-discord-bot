@@ -31,7 +31,7 @@ spec:
         - name: bot
           # Tag is set by CI. Never :latest — it makes rollouts and
           # `rollout undo` ambiguous.
-          image: ghcr.io/scouterna/discord-wsj27-bot:PLACEHOLDER-set-by-ci
+          image: ghcr.io/scouterna/wsj27-discord-bot:PLACEHOLDER-set-by-ci
           envFrom:
             - configMapRef:
                 name: discord-wsj27-bot-config

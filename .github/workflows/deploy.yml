@@ -1,0 +1,100 @@
+name: Deploy
+
+# Builds an image tagged with the commit SHA, pushes it to GHCR, then applies
+# k8s/ to the `wsj27` namespace on Scouterna's shared AKS cluster.
+#
+# No Azure credentials are involved: the image goes to GHCR and the deploy goes
+# to Kubernetes. Azure keeps only the Files share the pod mounts at runtime.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One deploy at a time; a queued run supersedes an older one but never
+  # cancels an apply in flight.
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/scouterna/wsj27-discord-bot
+  # Pinned rather than trusting whatever the runner image ships. `kubectl apply
+  # -k` embeds kustomize, but `kustomize edit` needs the standalone binary.
+  KUSTOMIZE_VERSION: 5.4.3
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Requires a reviewer on the prod environment before anything is pushed.
+    environment: prod
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        run: |
+          docker build -t "$IMAGE:${{ steps.tag.outputs.tag }}" .
+          docker push "$IMAGE:${{ steps.tag.outputs.tag }}"
+
+      - name: Install kustomize
+        run: |
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin kustomize
+          kustomize version
+
+      - name: Configure kubectl
+        env:
+          # Base64-encoded kubeconfig for the `github-deployer-wsj27-bot`
+          # service account. That identity can touch this bot's Deployment and
+          # ConfigMap and nothing else in the namespace — it cannot read
+          # Secrets, cannot delete anything, and cannot redeploy the ScoutID
+          # bot or scoutview, which share this namespace.
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/.kube"
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$RUNNER_TEMP/.kube/config"
+          chmod 600 "$RUNNER_TEMP/.kube/config"
+          echo "KUBECONFIG=$RUNNER_TEMP/.kube/config" >> "$GITHUB_ENV"
+
+      - name: Apply manifests
+        run: |
+          # Edits the ephemeral checkout only; the committed kustomization.yaml
+          # keeps its placeholder, so no tag in the repo can go stale.
+          (cd k8s && kustomize edit set image "$IMAGE=$IMAGE:${{ steps.tag.outputs.tag }}")
+          kubectl apply -k k8s/
+          # The gateway bot serves no HTTP, so there is nothing to curl. This
+          # is the only health gate: it fails on ImagePullBackOff or a
+          # CrashLoop, which is how a bad image or a missing secret shows up.
+          kubectl rollout status deploy/discord-wsj27-bot --timeout=180s
+
+      - name: Confirm the bot connected to Discord
+        run: |
+          # `rollout status` only proves the process stayed up. src/index.js
+          # logs "is online and ready!" from the clientReady handler once the
+          # gateway session is established — the only signal that matters for a
+          # bot with no HTTP surface. A bad DISCORD_TOKEN keeps the process
+          # alive but never reaches this line.
+          for i in $(seq 1 12); do
+            if kubectl logs -l app=discord-wsj27-bot --tail=50 2>/dev/null | grep -q "is online and ready"; then
+              echo "gateway connected after ${i} attempt(s)"; exit 0
+            fi
+            echo "attempt $i: no ready line yet"; sleep 5
+          done
+          echo "--- logs ---"; kubectl logs -l app=discord-wsj27-bot --tail=50
+          echo "bot did not report a gateway connection within ~60s"; exit 1
