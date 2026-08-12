@@ -5,7 +5,7 @@ variable "project_name" {
 }
 
 variable "environment" {
-  description = "Deployment environment"
+  description = "Deployment environment (e.g., prod, staging)"
   type        = string
   default     = "prod"
 }
@@ -17,7 +17,7 @@ variable "location" {
 }
 
 variable "location-abbr" {
-  description = "Azure region abbreviation"
+  description = "Azure region abbreviation for resources"
   type        = string
   default     = "sec"
 }
@@ -31,33 +31,12 @@ variable "tags" {
   }
 }
 
-variable "docker_image_name" {
-  description = "Docker image name in ACR"
-  type        = string
-  default     = "discord-wsj27-bot"
-}
-
-variable "docker_image_tag" {
-  description = "Docker image tag"
-  type        = string
-  default     = "latest"
-}
-
-# Discord secrets
-variable "discord_token" {
-  description = "Discord bot token"
-  type        = string
-  sensitive   = true
-}
-
-variable "discord_client_id" {
-  description = "Discord client ID"
-  type        = string
-  sensitive   = true
-}
-
-variable "discord_guild_id" {
-  description = "Discord guild ID"
-  type        = string
-  sensitive   = true
-}
+# The bot's own configuration and secrets are no longer Terraform's concern.
+# They moved to Kubernetes when it left Container Apps: CLAIMS_PATH and NODE_ENV
+# to k8s/configmap.yaml, and DISCORD_TOKEN / DISCORD_CLIENT_ID /
+# DISCORD_GUILD_ID to the `discord-wsj27-bot-secrets` Secret in the wsj27
+# namespace.
+#
+# docker_image_name and docker_image_tag go with them. The tag was pinned to
+# "latest", which on Container Apps meant a deploy could silently keep running
+# the old image; CI now tags with the commit SHA.
