@@ -27,6 +27,23 @@ spec:
       # src/index.js handles SIGTERM with client.destroy(), so the gateway
       # session closes cleanly instead of timing out.
       terminationGracePeriodSeconds: 30
+      # This repository is private, so its GHCR package is private too —
+      # package visibility follows repository visibility. Unlike the ScoutID
+      # bot, whose source is public anyway, a public image here would expose
+      # code that is otherwise closed.
+      #
+      # KNOWN COMPROMISE, accepted deliberately: `ghcr-pull` holds a personal
+      # PAT belonging to hakan-persson, shared with scoutview. This bot's
+      # ability to *start* therefore depends on one person's token — not
+      # visibly, because running pods keep working from the cached image. It
+      # breaks only when a pod reschedules, which may be weeks later and will
+      # take scoutview down at the same time.
+      #
+      # Accepted because this cluster is being replaced within a year, where
+      # the credential is solved properly. If that timeline slips, replace this
+      # with a dedicated read:packages token or an org-owned machine account.
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: bot
           # Tag is set by CI. Never :latest — it makes rollouts and

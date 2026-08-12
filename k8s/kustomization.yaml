@@ -14,6 +14,9 @@ resources:
 # plaintext:
 #   discord-wsj27-bot-secrets  DISCORD_TOKEN / DISCORD_CLIENT_ID / DISCORD_GUILD_ID
 #   wsj27-bot-storage          azurestorageaccountname / azurestorageaccountkey
+#
+# The pull secret `ghcr-pull` is pre-existing and shared with scoutview; see the
+# note in deployment.yaml for why that is a knowing compromise.
 
 images:
   - name: ghcr.io/scouterna/wsj27-discord-bot
