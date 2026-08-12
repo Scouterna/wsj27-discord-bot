@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: wsj27
+
+resources:
+  - configmap.yaml
+  - deployment.yaml
+
+# No Service and no Ingress: this is a gateway bot with no inbound traffic.
+#
+# Two Secrets are created imperatively rather than declared here — this cluster
+# has no sealed-secrets or external-secrets, so a Secret in git would be
+# plaintext:
+#   discord-wsj27-bot-secrets  DISCORD_TOKEN / DISCORD_CLIENT_ID / DISCORD_GUILD_ID
+#   wsj27-bot-storage          azurestorageaccountname / azurestorageaccountkey
+
+images:
+  - name: ghcr.io/scouterna/discord-wsj27-bot
+    # CI rewrites this in its own ephemeral checkout, so the committed value
+    # stays a placeholder and can never go stale. A manual apply must name the
+    # tag; skipping it fails loudly on ImagePullBackOff:
+    #
+    #   IMG=ghcr.io/scouterna/discord-wsj27-bot
+    #   (cd k8s && kustomize edit set image "$IMG=$IMG:<sha>") && kubectl apply -k k8s/
+    #
+    # Revert the edit afterwards — do not commit a real tag.
+    newTag: PLACEHOLDER-set-by-ci

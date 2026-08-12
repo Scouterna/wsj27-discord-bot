@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discord-wsj27-bot
+  labels:
+    app: discord-wsj27-bot
+spec:
+  # Exactly one. This is a discord.js *gateway* bot: a second instance opens its
+  # own gateway session, receives the same events, and answers every command
+  # twice. Two writers would also race on claims.json in the shared file.
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: discord-wsj27-bot
+  strategy:
+    # Recreate, not RollingUpdate: maxSurge would briefly run two instances,
+    # which is exactly what must not happen. The cost is a few seconds of
+    # downtime per deploy, which is invisible here — there is no inbound
+    # traffic, and Discord queues gateway events across a short reconnect.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: discord-wsj27-bot
+    spec:
+      # src/index.js handles SIGTERM with client.destroy(), so the gateway
+      # session closes cleanly instead of timing out.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: bot
+          # Tag is set by CI. Never :latest — it makes rollouts and
+          # `rollout undo` ambiguous.
+          image: ghcr.io/scouterna/discord-wsj27-bot:PLACEHOLDER-set-by-ci
+          envFrom:
+            - configMapRef:
+                name: discord-wsj27-bot-config
+            # Created imperatively; not part of this kustomization.
+            - secretRef:
+                name: discord-wsj27-bot-secrets
+          # Matches what the Container App was given (0.25 CPU / 0.5Gi), sized
+          # against 93-97% actual node memory. Do not oversize.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /persistent
+          # No probes: the bot serves no HTTP, so there is nothing to poll.
+          # Kubernetes restarts it if the process exits; discord.js handles
+          # gateway reconnects itself.
+      volumes:
+        - name: data
+          # CSI inline, so the share is named here in the pod spec and needs
+          # only a namespace Secret. A PersistentVolume would be cluster-scoped
+          # and this service account cannot create one (verified: 403).
+          csi:
+            driver: file.csi.azure.com
+            readOnly: false
+            volumeAttributes:
+              secretName: wsj27-bot-storage
+              shareName: bot-data
+              mountOptions: dir_mode=0777,file_mode=0777,cache=strict,actimeo=30,nosharesock
