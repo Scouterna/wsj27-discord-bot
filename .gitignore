@@ -23,3 +23,6 @@ terraform/.terraform.lock.hcl
 # Kubeconfigs hold long-lived service-account tokens; they live in ~/.kube
 **/kubeconfig*
 **/*.kubeconfig
+
+# Claude Code local settings cache literal command strings, which can capture secrets
+.claude/*.local.json
