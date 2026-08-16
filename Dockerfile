@@ -13,17 +13,19 @@ WORKDIR /app
 # this image.
 COPY package*.json .npmrc* ./
 
-# `npm install`, not `npm ci`, because there is no package-lock.json yet. That
-# is worth fixing — installs are non-deterministic without one — but the
-# lockfile has to be generated somewhere that can reach registry.npmjs.org
-# directly. Generating it behind the internal mirror would write that host into
-# every `resolved` URL and break any build that cannot see it.
+# `npm ci` is deterministic: it installs exactly package-lock.json and fails if
+# package.json disagrees with it. The lockfile records registry.npmjs.org in
+# every `resolved` URL, which is what makes it portable — behind the internal
+# mirror npm rewrites that host to the configured registry on the fly
+# (`replace-registry-host`, default `npmjs`), so one committed lockfile serves
+# both networks. Never regenerate it behind the mirror without rewriting those
+# URLs back, or builds that cannot see that host break.
 #
-# Either way npm cannot be trusted to fail the build on its own: when a registry
-# request breaks — e.g. a TLS-intercepting proxy — npm 10 can die with "Exit
-# handler never called!" and still exit 0, leaving a half-written node_modules.
-# The check below refuses to ship an image whose dependencies did not land.
-RUN npm install --omit=dev --no-audit --no-fund \
+# npm cannot be trusted to fail the build on its own: when a registry request
+# breaks — e.g. a TLS-intercepting proxy — npm 10 can die with "Exit handler
+# never called!" and still exit 0, leaving a half-written node_modules. The
+# check below refuses to ship an image whose dependencies did not land.
+RUN npm ci --omit=dev --no-audit --no-fund \
  && node -e "const fs=require('fs'),{dependencies={}}=require('./package.json');const missing=Object.keys(dependencies).filter(m=>!fs.existsSync('node_modules/'+m+'/package.json'));if(missing.length){console.error('npm ci left dependencies missing: '+missing.join(', '));process.exit(1)}"
 
 FROM node:20-alpine
