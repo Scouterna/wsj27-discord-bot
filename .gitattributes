@@ -1,0 +1,9 @@
+# core.autocrlf=true on Windows checks files out with CRLF, which breaks them on
+# Linux: bash fails on a `\r` in a shebang or command, and Docker carries the
+# `\r` into RUN lines. Everything here executes in a container or on a CI
+# runner, so pin the whole tree to LF regardless of platform.
+#
+# A catch-all rather than a list of extensions: without one, a Windows checkout
+# left every file in this repository looking modified from inside the
+# devcontainer, which buries real changes in line-ending noise.
+* text=auto eol=lf
