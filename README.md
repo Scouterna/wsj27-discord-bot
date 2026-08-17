@@ -126,27 +126,23 @@ actually a member of the guild.
 The share is mounted through the `wsj27-bot-storage` Secret, created
 imperatively — see `k8s/kustomization.yaml`.
 
-### The Azure resources behind the share are unmanaged
+### The Azure resources behind the share
 
-`terraform/` used to declare them and was deleted along with the Container Apps
-setup it was written for. Three resources are left in the WSJ27 subscription
-with no infrastructure-as-code describing them:
+Managed in [Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra)
+(`azure/wsj27_bot.tf`), not here. This repository had its own `terraform/`
+directory until 2026-08-17; it was written to deploy the bot to Azure Container
+Apps, and once the AKS migration removed the compute it declared nothing but
+this storage.
 
 | Resource | Name |
 | --- | --- |
 | Resource group | `rg-discord-wsj27-bot-prod-sec` |
-| Storage account | `stdiscordwsj27botprodsec` (Standard_LRS, swedencentral) |
+| Storage account | `stdiscordwsj27botprodsec` |
 | File share | `bot-data` |
 
-The share was **empty** as of 2026-08-17 — no `claims.json` has ever been
-written, because the bot was in no guild until 2026-08-16 and its troop matching
-has never resolved (see the known issue under Commands). So there is nothing to
-lose here yet, but there will be once the bot works.
-
-Two ways to close this: import the three into `Scouterna/wsj27-infra` (`azure/`),
-which is where everything else left in the subscription is managed, or drop the
-file share for a PersistentVolumeClaim and delete the resource group. The second
-removes the last Azure dependency this bot has.
+**There is no backup of `claims.json`.** The share was empty when it moved,
+because the bot had never served a request — but once it works, losing the share
+means every troop re-claims its name.
 
 ## Troubleshooting
 
