@@ -38,7 +38,6 @@ data/
 ├── names.json            Static list of 40 names
 └── claims.json           Dynamic claims data (auto-generated)
 k8s/                      Kubernetes manifests (deployed by CI)
-terraform/                Legacy Azure Container Apps config — no longer deploys
 ```
 
 ## Setup
@@ -117,20 +116,37 @@ docker run --rm --env-file .env ghcr.io/scouterna/wsj27-discord-bot:<sha> node s
 Guild command registration fails with `50001 Missing Access` until the bot is
 actually a member of the guild.
 
-### Legacy Azure infrastructure
-
-`terraform/` describes the Azure Container Apps setup this bot ran on until the
-AKS migration. **It no longer deploys anything** — the container registry it
-references, `acrwsj27prodsec`, has been deleted. Only the Azure Files share for
-`claims.json` is still live. See `Scouterna/wsj27-infra` (`azure/`) for what
-remains in the subscription.
-
 ## Data persistence
 
 - `data/names.json` — Static list of names, baked into the Docker image
-- `claims.json` — Dynamic claims, persisted in Azure Files (mounted at `/persistent/claims.json` in production, configurable via `CLAIMS_PATH` env var)
+- `claims.json` — Dynamic claims, persisted on an Azure Files share mounted at
+  `/persistent` (path configurable via `CLAIMS_PATH`). Claims survive restarts
+  and redeployments.
 
-Claims survive container restarts and redeployments.
+The share is mounted through the `wsj27-bot-storage` Secret, created
+imperatively — see `k8s/kustomization.yaml`.
+
+### The Azure resources behind the share are unmanaged
+
+`terraform/` used to declare them and was deleted along with the Container Apps
+setup it was written for. Three resources are left in the WSJ27 subscription
+with no infrastructure-as-code describing them:
+
+| Resource | Name |
+| --- | --- |
+| Resource group | `rg-discord-wsj27-bot-prod-sec` |
+| Storage account | `stdiscordwsj27botprodsec` (Standard_LRS, swedencentral) |
+| File share | `bot-data` |
+
+The share was **empty** as of 2026-08-17 — no `claims.json` has ever been
+written, because the bot was in no guild until 2026-08-16 and its troop matching
+has never resolved (see the known issue under Commands). So there is nothing to
+lose here yet, but there will be once the bot works.
+
+Two ways to close this: import the three into `Scouterna/wsj27-infra` (`azure/`),
+which is where everything else left in the subscription is managed, or drop the
+file share for a PersistentVolumeClaim and delete the resource group. The second
+removes the last Azure dependency this bot has.
 
 ## Troubleshooting
 
@@ -143,4 +159,4 @@ Claims survive container restarts and redeployments.
   stayed green. Inviting the bot needs Manage Server in the Discord UI and
   cannot be done from Terraform.
 - **Commands not showing**: Run `npm run deploy`. Guild commands appear instantly; global commands take up to 1 hour
-- **Lost claims after restart**: Make sure `CLAIMS_PATH` points to the Azure Files mount (`/persistent/claims.json`)
+- **Lost claims after restart**: make sure `CLAIMS_PATH` points at the Azure Files mount (`/persistent/claims.json`). Without the mount the file lands in the container's writable layer and dies with the pod
