@@ -7,7 +7,7 @@ metadata:
 spec:
   # Exactly one. This is a discord.js *gateway* bot: a second instance opens its
   # own gateway session, receives the same events, and answers every command
-  # twice. Two writers would also race on claims.json in the shared file.
+  # twice.
   replicas: 1
   revisionHistoryLimit: 5
   selector:
@@ -64,21 +64,11 @@ spec:
             limits:
               cpu: 250m
               memory: 512Mi
-          volumeMounts:
-            - name: data
-              mountPath: /persistent
           # No probes: the bot serves no HTTP, so there is nothing to poll.
           # Kubernetes restarts it if the process exits; discord.js handles
           # gateway reconnects itself.
-      volumes:
-        - name: data
-          # CSI inline, so the share is named here in the pod spec and needs
-          # only a namespace Secret. A PersistentVolume would be cluster-scoped
-          # and this service account cannot create one (verified: 403).
-          csi:
-            driver: file.csi.azure.com
-            readOnly: false
-            volumeAttributes:
-              secretName: wsj27-bot-storage
-              shareName: bot-data
-              mountOptions: dir_mode=0777,file_mode=0777,cache=strict,actimeo=30,nosharesock
+          #
+          # No volume either. The Azure Files share `bot-data` was mounted at
+          # /persistent for claims.json until the name-claiming feature was
+          # removed on 2026-08-17. The share and the `wsj27-bot-storage` Secret
+          # still exist — see the README — but nothing reads or writes them.

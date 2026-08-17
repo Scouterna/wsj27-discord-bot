@@ -1,42 +1,33 @@
 # Discord WSJ27 Bot
 
-A Discord bot for managing name claims with troop-based restrictions. Troops can claim unique names from a predefined list, with only one name per troop allowed.
+A Discord bot for WSJ 2027 Sverige. It currently does one thing: hold a gateway
+connection and confirm it is running.
+
+The bot was written to let troops claim unique names from a fixed list —
+`/take`, `/return`, `/list`, backed by a `claims.json` on an Azure Files share.
+That feature was removed on 2026-08-17 because it is not going to be used. It
+had also never worked: troop detection matched roles against
+`/^Avd (\d{1,2}) .*$/`, and the WSJ27 guild has no such role — its troop roles
+are `Deltagare-01`, `Ledare-01` and `Avdelningssupport-Avd-01`, created by
+Terraform in [Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra)
+(`discord/roles.tf`). Checked against all 218 roles: zero matches. The bot was
+in no guild at all until 2026-08-16, so the commands had never been reachable to
+fail. `git log` has the code if any of it is wanted back.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/take <name>` | Claim a name for your troop (autocomplete shows available names) |
-| `/return <name>` | Return your troop's claimed name (autocomplete shows your names) |
-| `/list [available_only]` | Show all names and their claim status |
-
-- Each troop can only hold one name at a time
-
-> **Known issue: nobody can use these commands.** Troop detection in
-> [`src/utils/troops.js`](src/utils/troops.js) matches roles against
-> `/^Avd (\d{1,2}) .*$/` — a name like `Avd 1 Alfa`, note the required space and
-> trailing text. No such role exists in the WSJ27 guild. Its troop roles are
-> named `Deltagare-01`, `Ledare-01` and `Avdelningssupport-Avd-01`, created by
-> Terraform in `Scouterna/wsj27-infra` (`discord/roles.tf`). Checked against all
-> 218 roles on 2026-08-17: zero matches, so `/take`, `/return` and `/list`
-> answer "No Troop Role" for everyone. The bot only joined the guild on
-> 2026-08-16, so this has never worked in practice. Either the pattern follows
-> the roles that exist, or the roles it expects have to be created.
+| `/ping` | Replies, ephemerally, with uptime and guild count |
 
 ## Project structure
 
 ```
 src/
-├── index.js              Main bot file (discord.js gateway)
-├── deploy-commands.js    One-time slash command registration
-├── storage.js            JSON file persistence (names + claims)
-├── commands/
-│   └── index.js          Slash command definitions
-└── utils/
-    └── troops.js         Troop role detection utilities
-data/
-├── names.json            Static list of 40 names
-└── claims.json           Dynamic claims data (auto-generated)
+├── index.js              Gateway client, activity, /ping
+├── deploy-commands.js    Slash command registration
+└── commands/
+    └── index.js          Slash command definitions
 k8s/                      Kubernetes manifests (deployed by CI)
 ```
 
@@ -116,23 +107,16 @@ docker run --rm --env-file .env ghcr.io/scouterna/wsj27-discord-bot:<sha> node s
 Guild command registration fails with `50001 Missing Access` until the bot is
 actually a member of the guild.
 
-## Data persistence
+## Storage — none, but the Azure resources are still there
 
-- `data/names.json` — Static list of names, baked into the Docker image
-- `claims.json` — Dynamic claims, persisted on an Azure Files share mounted at
-  `/persistent` (path configurable via `CLAIMS_PATH`). Claims survive restarts
-  and redeployments.
+The bot writes nothing. It holds no state, mounts no volume and reads no files
+beyond its own source.
 
-The share is mounted through the `wsj27-bot-storage` Secret, created
-imperatively — see `k8s/kustomization.yaml`.
-
-### The Azure resources behind the share
-
-Managed in [Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra)
-(`azure/wsj27_bot.tf`), not here. This repository had its own `terraform/`
-directory until 2026-08-17; it was written to deploy the bot to Azure Container
-Apps, and once the AKS migration removed the compute it declared nothing but
-this storage.
+An Azure Files share was mounted at `/persistent` for `claims.json` until the
+name-claiming feature went. The share never held anything, because the bot never
+successfully served a request. Three resources outlive it, managed in
+[Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra)
+(`azure/wsj27_bot.tf`):
 
 | Resource | Name |
 | --- | --- |
@@ -140,19 +124,16 @@ this storage.
 | Storage account | `stdiscordwsj27botprodsec` |
 | File share | `bot-data` |
 
-**There is no backup of `claims.json`.** The share was empty when it moved,
-because the bot had never served a request — but once it works, losing the share
-means every troop re-claims its name.
+Plus the `wsj27-bot-storage` Secret in namespace `wsj27`. Nothing reads any of
+it. Deleting them would remove this bot's last Azure dependency; they are kept
+only in case the feature comes back in some form.
 
 ## Troubleshooting
 
 - **Bot doesn't respond**: Check if commands are deployed (`npm run deploy`), verify bot permissions
-- **"No Troop Role" error**: expected — see the known issue under Commands. The
-  role pattern matches nothing in this guild.
 - **Bot appears healthy but does nothing**: check the guild count, not the pod.
   `kubectl logs -l app=discord-wsj27-bot` must show `Serving 1 guilds`. It read
   `0` from the AKS migration until 2026-08-16 while every pod-level signal
   stayed green. Inviting the bot needs Manage Server in the Discord UI and
   cannot be done from Terraform.
 - **Commands not showing**: Run `npm run deploy`. Guild commands appear instantly; global commands take up to 1 hour
-- **Lost claims after restart**: make sure `CLAIMS_PATH` points at the Azure Files mount (`/persistent/claims.json`). Without the mount the file lands in the container's writable layer and dies with the pod

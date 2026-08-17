@@ -4,6 +4,3 @@ metadata:
   name: discord-wsj27-bot-config
 data:
   NODE_ENV: production
-  # Path inside the mounted Azure Files share. src/storage.js falls back to
-  # data/claims.json in the image, which would be lost on every restart.
-  CLAIMS_PATH: /persistent/claims.json

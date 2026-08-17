@@ -35,10 +35,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY src ./src
-COPY data ./data
 
-# The node images ship an unprivileged `node` user. The bot writes only to the
-# mounted share, never into the image.
+# The node images ship an unprivileged `node` user. The bot writes nothing at
+# all — no state, no files.
 USER node
 
 # Exec form, and node directly rather than via `npm start`, so node is PID 1 and

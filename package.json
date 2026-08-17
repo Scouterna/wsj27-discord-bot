@@ -1,7 +1,7 @@
 {
   "name": "discord-wsj27-bot",
   "version": "1.0.0",
-  "description": "Discord bot for WSJ27 name claiming system with troop-based restrictions",
+  "description": "Discord bot for WSJ27 — currently only reports that it is running",
   "main": "src/index.js",
   "type": "module",
   "engines": {
@@ -13,7 +13,7 @@
     "deploy": "node src/deploy-commands.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["discord", "bot", "names", "troops", "wsj27"],
+  "keywords": ["discord", "bot", "wsj27"],
   "author": "Petter Sandholdt <petter@sandholdt.se>",
   "license": "MIT",
   "dependencies": {
