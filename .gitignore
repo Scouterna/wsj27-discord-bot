@@ -13,13 +13,6 @@ data/claims.json
 # the image entirely: it is copied only into the dependency stage.
 .npmrc
 
-# Terraform
-terraform/secrets.tfvars
-terraform/.terraform/
-terraform/*.tfstate*
-terraform/.terraform.lock.hcl
-*tfplan
-
 # Kubeconfigs hold long-lived service-account tokens; they live in ~/.kube
 **/kubeconfig*
 **/*.kubeconfig
