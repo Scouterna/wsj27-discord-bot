@@ -94,9 +94,10 @@ IMG=ghcr.io/scouterna/wsj27-discord-bot
 kubectl apply -k k8s/
 ```
 
-Two Secrets are created imperatively rather than declared in git — the cluster
-has no sealed-secrets, so a Secret in the repo would be plaintext:
-`discord-wsj27-bot-secrets` and `wsj27-bot-storage`.
+One Secret is created imperatively rather than declared in git — the cluster has
+no sealed-secrets, so a Secret in the repo would be plaintext:
+`discord-wsj27-bot-secrets`, holding `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` and
+`DISCORD_GUILD_ID`.
 
 ### Deploy slash commands
 
@@ -107,26 +108,18 @@ docker run --rm --env-file .env ghcr.io/scouterna/wsj27-discord-bot:<sha> node s
 Guild command registration fails with `50001 Missing Access` until the bot is
 actually a member of the guild.
 
-## Storage — none, but the Azure resources are still there
+## Storage — none
 
 The bot writes nothing. It holds no state, mounts no volume and reads no files
-beyond its own source.
+beyond its own source. Restarting it loses nothing, because there is nothing to
+lose.
 
-An Azure Files share was mounted at `/persistent` for `claims.json` until the
-name-claiming feature went. The share never held anything, because the bot never
-successfully served a request. Three resources outlive it, managed in
-[Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra)
-(`azure/wsj27_bot.tf`):
-
-| Resource | Name |
-| --- | --- |
-| Resource group | `rg-discord-wsj27-bot-prod-sec` |
-| Storage account | `stdiscordwsj27botprodsec` |
-| File share | `bot-data` |
-
-Plus the `wsj27-bot-storage` Secret in namespace `wsj27`. Nothing reads any of
-it. Deleting them would remove this bot's last Azure dependency; they are kept
-only in case the feature comes back in some form.
+It used to mount an Azure Files share at `/persistent` for `claims.json`. The
+share, its storage account `stdiscordwsj27botprodsec`, the resource group around
+them and the `wsj27-bot-storage` Secret were all deleted on 2026-08-17 together
+with the feature that used them. The share had never held a byte — the bot never
+successfully served a request. **This repository has no Azure dependency of any
+kind now**: it builds to GHCR and runs on the shared AKS cluster.
 
 ## Troubleshooting
 

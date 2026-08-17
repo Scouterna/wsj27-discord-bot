@@ -9,11 +9,13 @@ resources:
 
 # No Service and no Ingress: this is a gateway bot with no inbound traffic.
 #
-# Two Secrets are created imperatively rather than declared here — this cluster
+# One Secret is created imperatively rather than declared here — this cluster
 # has no sealed-secrets or external-secrets, so a Secret in git would be
 # plaintext:
 #   discord-wsj27-bot-secrets  DISCORD_TOKEN / DISCORD_CLIENT_ID / DISCORD_GUILD_ID
-#   wsj27-bot-storage          azurestorageaccountname / azurestorageaccountkey
+#
+# There was a second, wsj27-bot-storage, holding the Azure Files credentials.
+# It went with the share on 2026-08-17.
 #
 # The pull secret `ghcr-pull` is pre-existing and shared with scoutview; see the
 # note in deployment.yaml for why that is a knowing compromise.

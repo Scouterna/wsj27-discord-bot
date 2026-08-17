@@ -68,7 +68,7 @@ spec:
           # Kubernetes restarts it if the process exits; discord.js handles
           # gateway reconnects itself.
           #
-          # No volume either. The Azure Files share `bot-data` was mounted at
-          # /persistent for claims.json until the name-claiming feature was
-          # removed on 2026-08-17. The share and the `wsj27-bot-storage` Secret
-          # still exist — see the README — but nothing reads or writes them.
+          # No volume either. An Azure Files share was mounted at /persistent
+          # for claims.json until the name-claiming feature was removed on
+          # 2026-08-17; the share and its storage account were deleted with it.
+          # The bot writes nothing now.
