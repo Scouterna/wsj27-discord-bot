@@ -37,7 +37,7 @@ client.once("clientReady", () => {
   console.log(`📊 Serving ${client.guilds.cache.size} guilds`);
 
   // Set bot activity
-  client.user.setActivity("Hanterar WSJ27 Avdelningsnamn", {
+  client.user.setActivity("Hjälpande bot", {
     type: ActivityType.Watching,
   });
 });
