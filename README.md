@@ -28,7 +28,6 @@ src/
 ├── deploy-commands.js    Slash command registration
 └── commands/
     └── index.js          Slash command definitions
-k8s/                      Kubernetes manifests (deployed by CI)
 ```
 
 ## Setup
@@ -61,43 +60,24 @@ docker-compose up -d
 
 ## Deployment
 
-The bot runs on Kubernetes — namespace `wsj27` on Scouterna's shared AKS cluster
-`webservices`, alongside `discord-scoutid` and `scoutview`. Manifests are in
-[k8s/](k8s/), images in GHCR.
+This repository builds the image and nothing else.
+[publish.yml](.github/workflows/publish.yml) runs on every push to `main` and
+pushes `ghcr.io/scouterna/wsj27-discord-bot:<sha7>` — the short commit SHA,
+never `latest`. There are no Kubernetes manifests here any more.
 
-Pushing to `main` builds the image and applies the manifests; see
-[.github/workflows/deploy.yml](.github/workflows/deploy.yml). The workflow ends
-by confirming the bot reconnected to Discord, which is the only check that
-means anything for a gateway bot — see Troubleshooting.
+The bot is deployed from [Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra):
+[`k8s/prod/discord-wsj27-bot.yaml`](https://github.com/Scouterna/wsj27-infra/blob/main/k8s/prod/discord-wsj27-bot.yaml),
+applied by ArgoCD to namespace `proj-wsj27-prod` on Scouterna's
+`webservices-v2` cluster. **To release, set the image tag there to the new
+`<sha7>` and commit**; to roll back, set the previous one. The secret
+`discord-wsj27-bot-secrets` (`DISCORD_TOKEN`, `DISCORD_CLIENT_ID`,
+`DISCORD_GUILD_ID`) is a SealedSecret beside it. How to rotate it, and how to
+look at the running pod with the team's read-only access, is in that repo's
+[`k8s/discord-bots.md`](https://github.com/Scouterna/wsj27-infra/blob/main/k8s/discord-bots.md).
 
-There is no Service and no Ingress: nothing talks to this bot over HTTP.
-
-```bash
-export KUBECONFIG=~/.kube/wsj27.yaml   # ~/.kube/config is rancher-desktop
-
-kubectl get pods -l app=discord-wsj27-bot
-kubectl logs -l app=discord-wsj27-bot --tail=50 --prefix
-kubectl rollout status deploy/discord-wsj27-bot
-kubectl rollout undo deploy/discord-wsj27-bot
-```
-
-**Always tag images with the git SHA, never `latest`** — a mutable tag makes
-`rollout undo` ambiguous, because two different images share one name.
-
-Break-glass manual deploy. `kubectl apply -k k8s/` alone gives
-`ImagePullBackOff`: the committed tag is a placeholder that CI rewrites in its
-own checkout, so name the tag explicitly and revert the edit afterwards.
-
-```bash
-IMG=ghcr.io/scouterna/wsj27-discord-bot
-(cd k8s && kustomize edit set image "$IMG=$IMG:$(git rev-parse --short HEAD)")
-kubectl apply -k k8s/
-```
-
-One Secret is created imperatively rather than declared in git — the cluster has
-no sealed-secrets, so a Secret in the repo would be plaintext:
-`discord-wsj27-bot-secrets`, holding `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` and
-`DISCORD_GUILD_ID`.
+It runs **exactly one replica**: this is a gateway bot, and a second instance
+opens its own gateway session and answers every command twice. There is no
+Service and no Ingress: nothing talks to this bot over HTTP.
 
 ### Deploy slash commands
 
@@ -119,13 +99,14 @@ share, its storage account `stdiscordwsj27botprodsec`, the resource group around
 them and the `wsj27-bot-storage` Secret were all deleted on 2026-08-17 together
 with the feature that used them. The share had never held a byte — the bot never
 successfully served a request. **This repository has no Azure dependency of any
-kind now**: it builds to GHCR and runs on the shared AKS cluster.
+kind now**: it builds to GHCR, and runs wherever wsj27-infra deploys it.
 
 ## Troubleshooting
 
 - **Bot doesn't respond**: Check if commands are deployed (`npm run deploy`), verify bot permissions
 - **Bot appears healthy but does nothing**: check the guild count, not the pod.
-  `kubectl logs -l app=discord-wsj27-bot` must show `Serving 1 guilds`. It read
+  `kubectl -n proj-wsj27-prod logs -l app=discord-wsj27-bot` must show
+  `Serving 1 guilds`. It read
   `0` from the AKS migration until 2026-08-16 while every pod-level signal
   stayed green. Inviting the bot needs Manage Server in the Discord UI and
   cannot be done from Terraform.
