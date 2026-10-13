@@ -8,9 +8,11 @@ The bot was written to let troops claim unique names from a fixed list —
 That feature was removed on 2026-08-17 because it is not going to be used. It
 had also never worked: troop detection matched roles against
 `/^Avd (\d{1,2}) .*$/`, and the WSJ27 guild has no such role — its troop roles
-are `Deltagare-01`, `Ledare-01` and `Avdelningssupport-Avd-01`, created by
-Terraform in [Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra)
-(`discord/roles.tf`). Checked against all 218 roles: zero matches. The bot was
+are `Deltagare-01` and `Ledare-01`, created by Terraform in
+[Scouterna/wsj27-infra](https://github.com/Scouterna/wsj27-infra)
+(`discord/roles.tf`). Checked against all 218 roles at the time, which also
+included a per-troop `Avdelningssupport-Avd-01` (removed 2026-10-13): zero
+matches. The bot was
 in no guild at all until 2026-08-16, so the commands had never been reachable to
 fail. `git log` has the code if any of it is wanted back.
 
