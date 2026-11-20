@@ -2,10 +2,12 @@ import { Client, GatewayIntentBits, ActivityType, MessageFlags } from "discord.j
 import dotenv from "dotenv";
 import { ForeignOverwriteError, MuteRegistry, leaderTroops, roleNames } from "./mutes.js";
 import { authorize, durationMs, formatRemaining } from "./tysta.js";
+import { reopen, shouldReopen, sweep, troopChatIds } from "./threads.js";
+import { createEventLog, who } from "./eventlog.js";
 
 dotenv.config();
 
-const { DISCORD_TOKEN } = process.env;
+const { DISCORD_TOKEN, LOG_CHANNEL_ID } = process.env;
 
 if (!DISCORD_TOKEN) {
   console.error("Missing DISCORD_TOKEN in environment variables");
@@ -16,7 +18,16 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-const mutes = new MuteRegistry(client);
+// #server-logg: what the bot did, for moderators. Unset → off.
+const eventLog = createEventLog({
+  send: LOG_CHANNEL_ID
+    ? async (content) => {
+        const channel = await client.channels.fetch(LOG_CHANNEL_ID);
+        await channel.send({ content, allowedMentions: { parse: [] } });
+      }
+    : null,
+});
+const mutes = new MuteRegistry(client, eventLog.log);
 
 client.once("clientReady", async () => {
   console.log(`✅ ${client.user.tag} is online and ready!`);
@@ -28,11 +39,38 @@ client.once("clientReady", async () => {
   });
 
   for (const guild of client.guilds.cache.values()) {
+    const summary = [];
     try {
-      await mutes.reconcile(guild);
+      const { kept, lifted } = await mutes.reconcile(guild);
+      summary.push(`${kept} tystnader kvar, ${lifted} hävda`);
     } catch (error) {
       console.error(`Kunde inte läsa tillbaka tystnader i ${guild.id}:`, error);
+      summary.push("⚠️ kunde inte läsa tillbaka tystnaderna");
     }
+    try {
+      const reopened = await sweep(guild, eventLog.log);
+      console.log(`🧵 Öppnade ${reopened} arkiverade patrulltrådar i ${guild.id}`);
+      summary.push(`${reopened} patrulltrådar öppnade igen`);
+    } catch (error) {
+      console.error(`Kunde inte gå igenom patrulltrådar i ${guild.id}:`, error);
+      summary.push(`⚠️ kunde inte gå igenom patrulltrådarna (${error.code ?? error.message})`);
+    }
+    eventLog.log(`🟢 WSJ27-boten startade: ${summary.join(", ")}`);
+  }
+});
+
+// Discord archives a thread after a week without messages; patrol threads
+// are kept open. See src/threads.js.
+client.on("threadUpdate", async (_before, thread) => {
+  const chats = troopChatIds(thread.guild);
+  if (!shouldReopen(thread, chats)) return;
+  const troop = chats.get(thread.parentId);
+  try {
+    await reopen(thread);
+    eventLog.log(`🧵 avd ${troop}: patrulltråden <#${thread.id}> arkiverades av Discord och öppnades igen`);
+  } catch (error) {
+    console.error(`Kunde inte öppna patrulltråd ${thread.id}:`, error);
+    eventLog.log(`⚠️ avd ${troop}: kunde inte öppna patrulltråden <#${thread.id}> igen (${error.code ?? error.message})`);
   }
 });
 
@@ -101,8 +139,9 @@ async function handleHav(interaction) {
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   let lifted = 0;
+  const cause = `hävd av ${await who(interaction.guild, interaction.user.id)}`;
   for (const troop of decision.troops) {
-    if (await mutes.lift(interaction.guild, { troop, userId: decision.target.id })) lifted += 1;
+    if (await mutes.lift(interaction.guild, { troop, userId: decision.target.id, cause })) lifted += 1;
   }
   await interaction.editReply(
     lifted ? `🔈 ${decision.target} kan skriva igen.` : `${decision.target} var inte tystad.`
@@ -162,14 +201,18 @@ process.on("unhandledRejection", (error) => {
   console.error("Unhandled promise rejection:", error);
 });
 
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   console.log("Received SIGINT, shutting down gracefully...");
+  // Before destroy(): the buffered log lines need the gateway session's REST client.
+  await eventLog.flush();
   client.destroy();
   process.exit(0);
 });
 
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   console.log("Received SIGTERM, shutting down gracefully...");
+  // Before destroy(): the buffered log lines need the gateway session's REST client.
+  await eventLog.flush();
   client.destroy();
   process.exit(0);
 });

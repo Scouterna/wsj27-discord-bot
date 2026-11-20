@@ -28,6 +28,7 @@ import {
   parseMuteMessage,
   troopsFromRoles,
 } from "./tysta.js";
+import { who } from "./eventlog.js";
 
 const DENY = Object.fromEntries(MUTE_DENY.map((bit) => [bit, false]));
 export const MUTE_DENY_BITS = PermissionsBitField.resolve(MUTE_DENY);
@@ -89,8 +90,10 @@ export class ForeignOverwriteError extends Error {
 }
 
 export class MuteRegistry {
-  constructor(client) {
+  /** `log(line)` writes to #server-logg (see eventlog.js); a no-op by default. */
+  constructor(client, log = () => {}) {
     this.client = client;
+    this.log = log;
     /** `${troop}:${userId}` → { troop, userId, until, timer } */
     this.active = new Map();
   }
@@ -132,11 +135,20 @@ export class MuteRegistry {
 
     this.schedule(guild, troop, userId, until);
     console.log(`🔇 avd ${troop}: ${userId} tystad till ${until.toISOString()}`);
+    this.log(
+      `🔇 avd ${troop}: ${await who(guild, userId)} tystad till <t:${Math.floor(until.getTime() / 1000)}:f> av ${await who(
+        guild,
+        byId
+      )}${reason ? ` — ”${reason}”` : ""}`
+    );
     return entry;
   }
 
-  /** Removes the overwrites in the troop's channels. Returns false if there were none. */
-  async lift(guild, { troop, userId, announce = true }) {
+  /**
+   * Removes the overwrites in the troop's channels. Returns false if there were
+   * none. `cause` is the tail of the log line: who lifted it, or why.
+   */
+  async lift(guild, { troop, userId, announce = true, cause = "tiden gick ut" }) {
     const entry = troopChannels(guild).get(troop);
     if (!entry) throw new Error(`Hittar inga kanaler för avdelning ${troop}`);
 
@@ -159,7 +171,10 @@ export class MuteRegistry {
         allowedMentions: { users: [userId] },
       });
     }
-    if (found) console.log(`🔈 avd ${troop}: ${userId} kan skriva igen`);
+    if (found) {
+      console.log(`🔈 avd ${troop}: ${userId} kan skriva igen`);
+      this.log(`🔈 avd ${troop}: ${await who(guild, userId)} kan skriva igen — ${cause}`);
+    }
     return found;
   }
 
@@ -238,13 +253,18 @@ export class MuteRegistry {
           this.schedule(guild, entry.troop, userId, until);
           kept += 1;
         } else {
-          await this.lift(guild, { troop: entry.troop, userId });
+          await this.lift(guild, {
+            troop: entry.troop,
+            userId,
+            cause: until ? "tiden gick ut medan boten var nere" : "ingen notis hittades efter omstart",
+          });
           lifted += 1;
         }
       }
     }
 
     console.log(`🔇 tystnader efter start: ${kept} kvar, ${lifted} hävda`);
+    return { kept, lifted };
   }
 }
 

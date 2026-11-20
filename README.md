@@ -1,8 +1,9 @@
 # Discord WSJ27 Bot
 
 A Discord bot for WSJ 2027 Sverige. It lets a troop's leaders mute a
-participant in the troop's own channels for a while (`/tysta`), and confirms it
-is running (`/ping`).
+participant in the troop's own channels for a while (`/tysta`), keeps the
+patrols' private threads from being archived, and confirms it is running
+(`/ping`).
 
 The bot was written to let troops claim unique names from a fixed list —
 `/take`, `/return`, `/list`, backed by a `claims.json` on an Azure Files share.
@@ -66,6 +67,45 @@ overwrite when the time is up. Reading is untouched.
   the WSJ27 server (`@everyone` is 0; `Avdelningsledare` and `CMT` carry
   USE_APPLICATION_COMMANDS), so they do not even see `/tysta`.
 
+## Patrol threads stay open
+
+Patrols have no channels of their own — four per troop would break Discord's
+500-channel and 250-role caps — so each patrol talks in a private thread in
+`#NN-djur-chat`. Discord archives a thread after at most a week without
+messages, and an archived thread drops out of the sidebar. `src/threads.js`
+undoes that:
+
+- On `threadUpdate`, an archived **private** thread whose parent is a troop
+  chat is unarchived at once, and its own auto-archive window is raised to one
+  week in the same edit. No message, no notification.
+- On startup, every archived private thread in the troop chats is reopened
+  (`fetchArchived({ type: "private", fetchAll: true })`, paged), for what was
+  archived while the bot was offline.
+- **A locked thread is left alone.** Locking is how a leader closes a patrol
+  thread for good; plain archiving cannot be told from Discord's own timeout
+  without the audit log. Public threads are never touched.
+
+Troop chats are found the same way as for `/tysta` (`troopChannels`).
+
+## What the bot did — #server-logg
+
+Everything the bot does on its own or on a leader's behalf is written, one line
+each, to a moderator-only channel (`LOG_CHANNEL_ID`; on the WSJ27 server
+`#server-logg`, shared with the ScoutID bot). Unset, logging is off.
+
+| Line | When |
+|------|------|
+| `🔇 avd NN: **Namn** tystad till … av **Ledare** — ”anledning”` | `/tysta` |
+| `🔈 avd NN: **Namn** kan skriva igen — hävd av **Ledare**` / `tiden gick ut` / `… efter omstart` | `/häv-tystnad`, expiry, reconcile |
+| `🧵 avd NN: patrulltråden #tråd arkiverades av Discord och öppnades igen` | a patrol thread reopened |
+| `🟢 WSJ27-boten startade: N tystnader kvar, M hävda, K patrulltrådar öppnade igen` | startup, with a `⚠️` part if a step failed |
+
+Lines are buffered and sent every three seconds, batched under Discord's
+2000-character limit, and flushed on SIGTERM. A failed write is logged to
+stdout and dropped — it never fails the command that caused it
+(`src/eventlog.js`). People are written as `**display name**`, not as
+mentions, and the message is sent with all mentions suppressed.
+
 ### Permissions the bot needs
 
 The bot has no role on the WSJ27 server (invited with `permissions=0`). What it
@@ -75,8 +115,9 @@ managed in wsj27-infra `discord/permissions.tf` (`troop_chat_wsj27_bot`,
 
 | Channel | Allow |
 |---------|-------|
-| `#NN-djur-chat` | View Channel, Read Message History, Send Messages, Manage Permissions |
+| `#NN-djur-chat` | View Channel, Read Message History, Send Messages, Manage Permissions, Manage Threads |
 | `#NN-djur-ledarinfo` | View Channel, Manage Permissions |
+| `#server-logg` | View Channel, Send Messages |
 
 Manage Permissions *as a channel overwrite* is what lets the bot deny bits it
 does not hold itself — Discord otherwise only allows a bot to allow/deny
@@ -86,6 +127,11 @@ startup (`Serving N guilds as user …`); that is the id the overwrites must
 target. A `50013 Missing Permissions` on `/tysta` means an overwrite is missing
 or the id is wrong, not that the token is.
 
+Manage Threads in the chat is for the patrol threads: without it the bot
+neither sees private threads it is not a member of, nor gets their
+`threadUpdate`, nor may list them archived. Missing, the startup log shows a
+`50001`/`50013` from the thread sweep, and threads quietly stay archived.
+
 ## Project structure
 
 ```
@@ -94,6 +140,8 @@ src/
 ├── deploy-commands.js    Slash command registration
 ├── tysta.js              Pure logic: role parsing, authorization, durations, notice format
 ├── mutes.js              Discord side: find troop channels, write/remove overwrites, reconcile
+├── threads.js            Keep patrol threads (private threads in troop chats) unarchived
+├── eventlog.js           Buffered lines to #server-logg (LOG_CHANNEL_ID)
 └── commands/
     └── index.js          Slash command definitions
 test/                     node --test; `npm test`
@@ -105,7 +153,7 @@ test/                     node --test; `npm test`
 
 ```bash
 cp .env.example .env
-# Fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID
+# Fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID; LOG_CHANNEL_ID is optional
 ```
 
 ### 2. Deploy slash commands (once)

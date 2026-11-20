@@ -1,7 +1,7 @@
 {
   "name": "discord-wsj27-bot",
   "version": "1.0.0",
-  "description": "Discord bot for WSJ27 — per-troop mutes (/tysta) and a liveness check (/ping)",
+  "description": "Discord bot for WSJ27 — per-troop mutes (/tysta), patrol threads kept open, and a liveness check (/ping)",
   "main": "src/index.js",
   "type": "module",
   "engines": {
