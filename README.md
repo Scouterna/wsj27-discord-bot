@@ -87,6 +87,25 @@ undoes that:
 
 Troop chats are found the same way as for `/tysta` (`troopChannels`).
 
+## What the bot did — #server-logg
+
+Everything the bot does on its own or on a leader's behalf is written, one line
+each, to a moderator-only channel (`LOG_CHANNEL_ID`; on the WSJ27 server
+`#server-logg`, shared with the ScoutID bot). Unset, logging is off.
+
+| Line | When |
+|------|------|
+| `🔇 avd NN: **Namn** tystad till … av **Ledare** — ”anledning”` | `/tysta` |
+| `🔈 avd NN: **Namn** kan skriva igen — hävd av **Ledare**` / `tiden gick ut` / `… efter omstart` | `/häv-tystnad`, expiry, reconcile |
+| `🧵 avd NN: patrulltråden #tråd arkiverades av Discord och öppnades igen` | a patrol thread reopened |
+| `🟢 WSJ27-boten startade: N tystnader kvar, M hävda, K patrulltrådar öppnade igen` | startup, with a `⚠️` part if a step failed |
+
+Lines are buffered and sent every three seconds, batched under Discord's
+2000-character limit, and flushed on SIGTERM. A failed write is logged to
+stdout and dropped — it never fails the command that caused it
+(`src/eventlog.js`). People are written as `**display name**`, not as
+mentions, and the message is sent with all mentions suppressed.
+
 ### Permissions the bot needs
 
 The bot has no role on the WSJ27 server (invited with `permissions=0`). What it
@@ -98,6 +117,7 @@ managed in wsj27-infra `discord/permissions.tf` (`troop_chat_wsj27_bot`,
 |---------|-------|
 | `#NN-djur-chat` | View Channel, Read Message History, Send Messages, Manage Permissions, Manage Threads |
 | `#NN-djur-ledarinfo` | View Channel, Manage Permissions |
+| `#server-logg` | View Channel, Send Messages |
 
 Manage Permissions *as a channel overwrite* is what lets the bot deny bits it
 does not hold itself — Discord otherwise only allows a bot to allow/deny
@@ -121,6 +141,7 @@ src/
 ├── tysta.js              Pure logic: role parsing, authorization, durations, notice format
 ├── mutes.js              Discord side: find troop channels, write/remove overwrites, reconcile
 ├── threads.js            Keep patrol threads (private threads in troop chats) unarchived
+├── eventlog.js           Buffered lines to #server-logg (LOG_CHANNEL_ID)
 └── commands/
     └── index.js          Slash command definitions
 test/                     node --test; `npm test`
@@ -132,7 +153,7 @@ test/                     node --test; `npm test`
 
 ```bash
 cp .env.example .env
-# Fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID
+# Fill in DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID; LOG_CHANNEL_ID is optional
 ```
 
 ### 2. Deploy slash commands (once)

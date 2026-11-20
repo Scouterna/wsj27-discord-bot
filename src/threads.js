@@ -26,11 +26,14 @@ import { troopChannels } from "./mutes.js";
 /** Discord's longest auto-archive window, in minutes (one week). */
 export const MAX_AUTO_ARCHIVE = 10080;
 
-/** Ids of the troop chats — the channels whose private threads are patrol threads. */
+/**
+ * Troop chats — the channels whose private threads are patrol threads — as
+ * chat id → troop number.
+ */
 export function troopChatIds(guild) {
-  const ids = new Set();
+  const ids = new Map();
   for (const entry of troopChannels(guild).values()) {
-    if (entry.chat) ids.add(entry.chat.id);
+    if (entry.chat) ids.set(entry.chat.id, entry.troop);
   }
   return ids;
 }
@@ -59,10 +62,10 @@ export async function reopen(thread) {
  * for the threads that were archived while the bot was not listening.
  * Returns how many were reopened.
  */
-export async function sweep(guild) {
+export async function sweep(guild, log = () => {}) {
   const chatIds = troopChatIds(guild);
   let reopened = 0;
-  for (const chatId of chatIds) {
+  for (const chatId of chatIds.keys()) {
     const chat = guild.channels.cache.get(chatId);
     let before;
     for (;;) {
@@ -74,6 +77,7 @@ export async function sweep(guild) {
         try {
           await reopen(thread);
           reopened += 1;
+          log(`🧵 avd ${chatIds.get(chatId)}: patrulltråden <#${thread.id}> öppnades igen (arkiverades medan boten var nere)`);
         } catch (error) {
           console.error(`Kunde inte öppna tråd ${thread.id} i ${chat.name}:`, error);
         }

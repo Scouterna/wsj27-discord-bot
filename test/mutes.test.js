@@ -156,14 +156,17 @@ test("mute writes a member deny in every troop channel and posts the notice in t
 
 test("lift deletes the overwrites, announces, and reports false when nothing was there", async () => {
   const guild = fakeGuild({ troops: ["12"], memberIds: { 12: ["kid"] } });
-  const registry = new MuteRegistry(fakeClient);
+  const lines = [];
+  const registry = new MuteRegistry(fakeClient, (l) => lines.push(l));
 
-  assert.equal(await registry.lift(guild, { troop: "12", userId: "kid" }), true);
+  assert.equal(await registry.lift(guild, { troop: "12", userId: "kid", cause: "hävd av **Ledare**" }), true);
+  assert.deepEqual(lines, ["🔈 avd 12: `kid` kan skriva igen — hävd av **Ledare**"]);
   assert.deepEqual(guild.channels.cache.get("chat-12").permissionOverwrites.deletes, ["kid"]);
   assert.deepEqual(guild.channels.cache.get("forum-12").permissionOverwrites.deletes, ["kid"]);
   assert.match(guild.channels.cache.get("chat-12").sent[0], /^🔈 <@kid>/);
 
   assert.equal(await registry.lift(guild, { troop: "12", userId: "kid" }), false);
+  assert.equal(lines.length, 1, "nothing lifted, nothing logged");
 });
 
 test("reconcile keeps a mute whose notice is still in the future and lifts the rest", async () => {

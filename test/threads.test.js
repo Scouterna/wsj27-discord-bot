@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { ChannelType } from "discord.js";
 import { MAX_AUTO_ARCHIVE, reopen, shouldReopen, sweep } from "../src/threads.js";
 
-const CHATS = new Set(["chat-01"]);
+const CHATS = new Map([["chat-01", "01"]]);
 
 function thread(overrides = {}) {
   return {
@@ -93,7 +93,10 @@ test("sweep pages through all archived private threads and skips locked ones", a
     { threads: collection([c]), hasMore: false },
   ]);
 
-  assert.equal(await sweep(guild), 2);
+  const lines = [];
+  assert.equal(await sweep(guild, (l) => lines.push(l)), 2);
+  assert.equal(lines.length, 2, "one #server-logg line per reopened thread");
+  assert.match(lines[0], /avd 01: patrulltråden <#a>/);
   assert.equal(a.edits.length, 1);
   assert.equal(b.edits.length, 0);
   assert.equal(c.edits.length, 1);
