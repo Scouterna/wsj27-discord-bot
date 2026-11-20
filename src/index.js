@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, ActivityType, MessageFlags } from "discord.j
 import dotenv from "dotenv";
 import { ForeignOverwriteError, MuteRegistry, leaderTroops, roleNames } from "./mutes.js";
 import { authorize, durationMs, formatRemaining } from "./tysta.js";
+import { reopen, shouldReopen, sweep, troopChatIds } from "./threads.js";
 
 dotenv.config();
 
@@ -33,6 +34,23 @@ client.once("clientReady", async () => {
     } catch (error) {
       console.error(`Kunde inte läsa tillbaka tystnader i ${guild.id}:`, error);
     }
+    try {
+      const reopened = await sweep(guild);
+      console.log(`🧵 Öppnade ${reopened} arkiverade patrulltrådar i ${guild.id}`);
+    } catch (error) {
+      console.error(`Kunde inte gå igenom patrulltrådar i ${guild.id}:`, error);
+    }
+  }
+});
+
+// Discord archives a thread after a week without messages; patrol threads
+// are kept open. See src/threads.js.
+client.on("threadUpdate", async (_before, thread) => {
+  if (!shouldReopen(thread, troopChatIds(thread.guild))) return;
+  try {
+    await reopen(thread);
+  } catch (error) {
+    console.error(`Kunde inte öppna patrulltråd ${thread.id}:`, error);
   }
 });
 
